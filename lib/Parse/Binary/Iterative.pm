@@ -4,7 +4,7 @@ use strict;
 no strict 'refs';
 use warnings;
 use Carp;
-our $VERSION = '0.01';
+our $VERSION = '1.00';
 use base qw(Class::Data::Inheritable Class::Accessor);
 use UNIVERSAL::require;
 
@@ -41,14 +41,21 @@ sub _init {
 sub mk_reader {
     my ($class, $key, $pattern) = @_;
     
-    *{"read_".$key} = sub {
+    *{"${class}::read_".$key} = sub {
         my ($self, $data) = @_;
         my @things;
         if (ref $pattern) { # XXX We need to do stuff with @$pattern
-            my $key_class = $key;
-            $key_class =~ s/_/::/g; $key_class->require;
-            @things = $key_class->new($data); 
-            $_->parent($self) for @things;
+            if (@{$pattern} == 2 and ref $pattern->[1] eq "CODE") {
+                my $p1 = $pattern->[0];
+                @things = $pattern->[1]->(
+                    unpack($p1, $class->_extract($p1, $data))
+                );
+            } else {
+                my $key_class = $key;
+                $key_class =~ s/_/::/g; $key_class->require;
+                @things = $key_class->new($data); 
+                $_->parent($self) for @things;
+            }
         } else { 
             @things = unpack($pattern, $class->_extract($pattern, $data))
         }
@@ -138,12 +145,26 @@ examples above, you need to set the C<FORMAT> class data accessor
 to an array reference; this should contain pairs of accessor names
 and formats suitable for feeding to C<unpack>. 
 
-Alternatively, if you want to "contract out" unpacking to a
-sub-structure, use an array reference instead of a format, and the name
-of the accessor will be taken as a class name to use instead. The array
-reference currently should be blank, but later versions of this module
-will use the elements of array reference to specify more complex
-unpacking instructions.
+If you want to do more complex stuff with your data format, use an array
+reference instead of a Perl format. This allows you to do the following:
+(This list will grow in future versons.)
+
+=over 3
+
+=item *
+
+If the array is two elements and the second is a code reference, the
+the first will be taken as an unpack format, and then the reader will
+"transform" the result of the unpack by passing it to the code
+reference.
+
+=item *
+
+If you want to "contract out" unpacking to a sub-structure, (see
+C<Parse::Binary>) use an empty array reference instead of a format, and the
+name of the accessor will be taken as a class name to use instead. 
+
+=cut
 
 When a substructure is used, the accessor returns the object processed
 by the substructure unpacker as you would expect; this object also has
